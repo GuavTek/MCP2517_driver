@@ -399,10 +399,15 @@ uint8_t MCP2517_C::Send_Message(){
 }
 
 // Request status info of FIFO
-void MCP2517_C::Check_FIFO_Status(uint8_t fifoNum){
+uint8_t MCP2517_C::Check_FIFO_Status(uint8_t fifoNum){
+	if (msgState != Msg_Idle){
+		return 0;
+	}
 	uint16_t addr = Get_FIFOSTA_Addr(fifoNum);
 	msgState = Msg_FIFO_Int;
+	currentFifo = fifoNum;
 	Receive_Buffer((ADDR_E) addr, 1);
+	return 1;
 }
 
 void MCP2517_C::Check_Int_Reg(){
@@ -425,11 +430,15 @@ uint8_t MCP2517_C::Check_Rx(){
 }
 
 void MCP2517_C::com_cb(){
+	if (com->Get_Status() == Idle){
+		Set_SS(0);
+	} else {
+		// Transfer still in progress
+		return;
+	}
 	switch(msgState){
-		case Msg_Rx_Flags:
-		if (com->Get_Status() == Idle){
+		case Msg_Rx_Flags: {
 			// Rx flags were fetched, check if data is waiting
-			Set_SS(0);
 			uint32_t intFlags = msgBuff[2] | (msgBuff[3] << 8) | (msgBuff[4] << 16) | (msgBuff[5] << 24);
 			if (intFlags == 0){
 				// No message
@@ -445,23 +454,19 @@ void MCP2517_C::com_cb(){
 					}
 				}
 			}
+			break;
 		}
-		break;
-		case Msg_Rx_Addr:
-		if (com->Get_Status() == Idle){
+		case Msg_Rx_Addr: {
 			// Rx RAM address fetched, start fetching header
-			Set_SS(0);
 			msgState = Msg_Rx_Header;
 
 			uint16_t addr = (msgBuff[3] << 8) | msgBuff[2];
 			addr += (uint16_t) ADDR_E::RAM_START;
 			msgAddr = addr;
 			Receive_Buffer((ADDR_E) addr, 12);
+			break;
 		}
-		break;
-		case Msg_Rx_Header:
-		if (com->Get_Status() == Idle){
-			Set_SS(0);
+		case Msg_Rx_Header: {
 			CAN_Rx_msg_t tempMsg;
 
 			tempMsg.id = msgBuff[2] | (msgBuff[3] << 8) | (msgBuff[4] << 16) | (msgBuff[5] << 24);
@@ -491,12 +496,9 @@ void MCP2517_C::com_cb(){
 				Receive_Buffer((ADDR_E) msgAddr, payloadLength);
 			}
 			msgState = Msg_Rx_Data;
+			break;
 		}
-		break;
-		case Msg_Rx_Data:
-		if (com->Get_Status() == Idle){
-			Set_SS(0);
-
+		case Msg_Rx_Data: {
 			if (payloadLength > 32){
 				payloadLength -= 32;
 				msgAddr += 32;
@@ -508,19 +510,15 @@ void MCP2517_C::com_cb(){
 				msgState = Msg_Rx_FIFO;
 				FIFO_Increment(currentFifo, 0);
 			}
+			break;
 		}
-		break;
-		case Msg_Rx_FIFO:
-		if (com->Get_Status() == Idle){
+		case Msg_Rx_FIFO: {
 			// Rx done
-			Set_SS(0);
 			msgState = Msg_Idle;
+			break;
 		}
-		break;
-		case Msg_Tx_Addr:
-		if (com->Get_Status() == Idle){
+		case Msg_Tx_Addr: {
 			// Tx RAM address was fetched, send data
-			Set_SS(0);
 			msgState = Msg_Tx_Data;
 
 			// Swap buffer address and message ID
@@ -530,12 +528,10 @@ void MCP2517_C::com_cb(){
 			msgBuff[3] = msgAddr >> 8;
 			msgAddr = addr;
 			Send_Buffer((ADDR_E) addr, payloadLength+8);	// Payload + header
+			break;
 		}
-		break;
-		case Msg_Tx_Data:
-		if (com->Get_Status() == Idle){
+		case Msg_Tx_Data: {
 			// Tx data was sent to RAM, increment fifo and request data send
-			Set_SS(0);
 			if(sendFifo) {
 				if (msgAppended){
 					msgAppended = 0;
@@ -553,16 +549,27 @@ void MCP2517_C::com_cb(){
 				// Wait for payload append
 				msgState = Msg_Tx_Idle;
 			}
+			break;
 		}
-		break;
-		case Msg_Tx_FIFO:
-		if (com->Get_Status() == Idle){
-			// Tx done
-			Set_SS(0);
+		case Msg_Tx_FIFO: {
+			// Tx done, check fifo status
+			uint16_t addr = Get_FIFOSTA_Addr(currentFifo);
+			msgState = Msg_FIFO_Int;
+			Receive_Buffer((ADDR_E) addr, 1);
+			break;
+		}
+		case Msg_FIFO_Int: {
+			CAN_FIFO_Status_t flags;
+			flags.word = msgBuff[2];
+			if (FIFO_Status_Callback != nullptr){
+				FIFO_Status_Callback(currentFifo, flags);
+			}
 			msgState = Msg_Idle;
+			break;
 		}
-		break;
-		default:
-		break;
+		default: {
+			msgState = Msg_Idle;
+			break;
+		}
 	}
 }

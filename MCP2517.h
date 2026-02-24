@@ -128,6 +128,32 @@ enum class CAN_MODE_E {
 	Restricted			= 0b111
 };
 
+struct CAN_FIFO_Status_t {
+	union {
+		struct {
+			bool notFull : 1;
+			bool halfEmpty : 1;
+			bool empty : 1;
+			bool unused : 1;
+			bool attemptsSpent : 1;
+			bool error : 1;
+			bool lostArbitration : 1;
+			bool aborted : 1;
+		} tx;
+		struct {
+			bool notEmpty : 1;
+			bool halfFull : 1;
+			bool full : 1;
+			bool overflow : 1;
+			bool unused : 1;
+			bool error : 1;
+			bool lostArbitration : 1;
+			bool aborted : 1;
+		} rx;
+		uint8_t word;
+	};
+};
+
 struct CAN_Config_t {
 	enum {	clkOutDiv1 = 0b00,
 			clkOutDiv2 = 0b01,
@@ -334,6 +360,8 @@ class MCP2517_C : public com_driver_c {
 		void Reconfigure_Filter(CAN_Filter_t* filterSetting, uint8_t filterNum);		// Change the configuration of a filter
 		inline void Set_Rx_Header_Callback(void (*cb)(CAN_Rx_msg_t*)){ Rx_Header_Callback = cb; }			// Set function to send the received CAN headers to
 		inline void Set_Rx_Data_Callback(void (*cb)(char*, uint8_t)){ Rx_Data_Callback = cb; }			// Set function to send the received payloads to
+		inline void Set_FIFO_Status_Callback(void (*cb)(uint8_t,CAN_FIFO_Status_t)){ FIFO_Status_Callback = cb; }			// Set function to send the FIFO status interrupt number to
+		uint8_t Check_FIFO_Status(uint8_t fifoNum);	// Fetch the fifo status
 		uint8_t Check_Rx();	// Try reading from MCP2517, return 0 if busy. Suggest triggering this via an RTC or checking the intpin
 		uint8_t Write_Message(CAN_Tx_msg_t* msg, uint8_t fifoNum);	// Write a message object to controller RAM, use Send_Message() to transmit this message on the CAN bus
 		uint8_t Append_Payload(char* data, uint8_t length);		// Append payload to previous message	TODO? verify payload size not overflowing
@@ -355,13 +383,13 @@ class MCP2517_C : public com_driver_c {
 		uint8_t Receive_Buffer(enum ADDR_E addr, uint8_t length);	// Fetch data to the internal buffer from the MCP2517
 		void (*Rx_Header_Callback)(CAN_Rx_msg_t*);	// The callback function for header objects
 		void (*Rx_Data_Callback)(char*, uint8_t);	// The callback function for payloads
+		void (*FIFO_Status_Callback)(uint8_t,CAN_FIFO_Status_t);	// The callback function for FIFO status, gives fifo number as argument
 		void Check_Int_Reg();	// Read the interrupt register of the MCP2517
 		inline uint16_t Get_FIFOCON_Addr(uint8_t fifoNum);	// Get the address of a fifo's control register
 		inline uint16_t Get_FIFOSTA_Addr(uint8_t fifoNum);	// Get the address of a fifo's status register
 		inline uint16_t Get_FIFOUA_Addr(uint8_t fifoNum);	// Get the address of a fifo's user address register (gives address the fifo points at)
 		void FIFO_Increment(uint8_t fifoNum, uint8_t txRequest);	// Increments the FIFO after reading/writing to it, optionally request a transmission
 		void FIFO_User_Address(uint8_t fifoNum);	// Fetch the current fifo address from the MCP2517
-		void Check_FIFO_Status(uint8_t fifoNum);	// Fetch the fifo status
 		void Check_Rx_Flags_Reg();	// Fetch the rx interrupt flags
 		uint32_t fifoTimestamp;		// Mask of which fifos use timestamps
 		uint16_t msgAddr;		// Current message address

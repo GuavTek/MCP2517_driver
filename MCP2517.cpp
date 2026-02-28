@@ -502,7 +502,7 @@ void MCP2517_C::com_cb(){
 			if (payloadLength > 32){
 				payloadLength -= 32;
 				msgAddr += 32;
-				Rx_Data_Callback(msgBuff, 32);
+				Rx_Data_Callback(&msgBuff[2], 32);
 				Receive_Buffer((ADDR_E) msgAddr, 32);
 			} else {
 				// Done fetching Rx data, increment fifo

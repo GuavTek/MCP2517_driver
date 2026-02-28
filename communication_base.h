@@ -3,7 +3,7 @@
  *
  * Created: 25/02/2023 14:56:40
  *  Author: GuavTek
- */ 
+ */
 
 
 #ifndef COMMUNICATION_BASE_H_
@@ -31,7 +31,8 @@ class communication_base_c
 		virtual uint8_t Transfer(char* buff, uint8_t length, com_state_e state) {return 0;};	// Try to start a transfer, returns 0 if operation failed
 		communication_base_c(uint8_t num_ss) {
 			numSS = num_ss;
-			slaveCallbacks = (com_driver_c**) malloc(4*num_ss);	// Allocate memory space for function pointers
+			slaveCallbacks = (com_driver_c**) malloc(sizeof(com_driver_c*) * num_ss); 	// Allocate memory space for function pointers
+			currentState = Idle;
 		};
 		~communication_base_c() {free(slaveCallbacks);};
 	protected:
@@ -47,7 +48,7 @@ class com_driver_c
 		uint8_t Set_SS(uint8_t enabled) {return com->Select_Slave(comSlaveNum, enabled);};
 		virtual void com_cb() {};
 		com_driver_c(communication_base_c* const comInstance, uint8_t slaveNum) {
-				com = comInstance; 
+				com = comInstance;
 				comSlaveNum = slaveNum;
 				com->Set_Slave_Callback(slaveNum, this);
 			};

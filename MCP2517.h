@@ -247,15 +247,15 @@ struct CAN_Filter_t {
 	bool enabled : 1;
 	uint8_t fifoDestination : 5;
 	bool extendedID : 1;
-	uint32_t ID : 29;
+	uint32_t ID : 32;
 	bool matchBothIDTypes : 1;
-	uint32_t maskID: 29;
+	uint32_t maskID: 32;
 };
 
 struct CAN_FIFO_t {
 	bool enabled : 1;
 	uint8_t payloadSize;
-	uint8_t fifoDepth : 5;
+	uint8_t fifoDepth : 8; // Is only 5 bits, but use 8 to make struct 32 bit
 	enum {None = 0, three = 1, unlimited = 2} retransmitAttempt : 2;
 	uint8_t messagePriority : 5;
 	bool txEnable : 1;
